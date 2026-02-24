@@ -26,3 +26,20 @@ Application to analyse your own finances privately and secure
 │         Ollama (localhost:11434)         │
 │         Modell: mistral:7b-instruct-q4  │
 └─────────────────────────────────────────┘
+
+# Flutter
+lib/
+├── main.dart                  ← App-Einstiegspunkt, Theme
+├── core/
+│   ├── api_client.dart        ← HTTP-Kommunikation mit FastAPI
+│   ├── models.dart            ← Dart-Versionen unserer Pydantic-Models
+│   └── theme.dart             ← Farben, Schriften, dark theme
+├── features/
+│   ├── upload/
+│   │   └── upload_screen.dart
+│   ├── dashboard/
+│   │   └── dashboard_screen.dart
+│   └── insights/
+│       └── insights_screen.dart
+└── widgets/
+    └── stat_card.dart         ← Wiederverwendbare UI-Komponenten
