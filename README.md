@@ -29,7 +29,7 @@ Application to analyse your own finances privately and secure
 └─────────────────────────────────────────┘
 ```
 
-# Flutter
+# Flutter File System
 ```text
 lib/
 ├── main.dart                  ← App-Einstiegspunkt, Theme
@@ -46,4 +46,22 @@ lib/
 │       └── insights_screen.dart
 └── widgets/
     └── stat_card.dart         ← Wiederverwendbare UI-Komponenten
+```
+
+Start Flutter
+```bash
+open -a Simulator
+
+cd apps/fainance_app
+flutter run
+```
+
+Start Venv
+```bash
+source fainance/bin/activate
+```
+
+Update Requirements
+```bash
+pip3 freeze > requirements.txt
 ```

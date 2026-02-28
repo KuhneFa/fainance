@@ -8,8 +8,8 @@ import 'models.dart';
 //
 // Für echte Geräte im selben WLAN: IP deines Macs, z.B. `192.168.1.100`.
 // `ifconfig | grep "inet "` auf dem Mac gibt dir die IP.
-const String _baseUrl = 'http://10.0.2.2:8000'; // Android Emulator
-// const String _baseUrl = 'http://localhost:8000'; // iOS Simulator / Web
+// const String _baseUrl = 'http://10.0.2.2:8000'; // Android Emulator
+ const String _baseUrl = 'http://localhost:8000'; // iOS Simulator / Web
 
 
 class ApiClient {
