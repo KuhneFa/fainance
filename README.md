@@ -2,7 +2,7 @@
 Application to analyse your own finances privately and secure
 
 # Architecture
-```mermaid
+```text
 ┌─────────────────────────────────────────┐
 │           Flutter App (Mobile)          │
 │                                         │
