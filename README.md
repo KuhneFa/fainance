@@ -2,6 +2,7 @@
 Application to analyse your own finances privately and secure
 
 # Architecture
+```mermaid
 ┌─────────────────────────────────────────┐
 │           Flutter App (Mobile)          │
 │                                         │
@@ -26,8 +27,10 @@ Application to analyse your own finances privately and secure
 │         Ollama (localhost:11434)         │
 │         Modell: mistral:7b-instruct-q4  │
 └─────────────────────────────────────────┘
+```
 
 # Flutter
+```text
 lib/
 ├── main.dart                  ← App-Einstiegspunkt, Theme
 ├── core/
@@ -43,3 +46,4 @@ lib/
 │       └── insights_screen.dart
 └── widgets/
     └── stat_card.dart         ← Wiederverwendbare UI-Komponenten
+```
