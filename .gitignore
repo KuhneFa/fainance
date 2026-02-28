@@ -64,3 +64,8 @@ fainance-backend/venv/
 fainance-backend/__pycache__/
 fainance-backend/*.pyc
 fainance-backend/finance.db
+
+# Node / Next.js
+apps/web/node_modules/
+apps/web/.next/
+apps/web/.turbo/
