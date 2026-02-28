@@ -58,3 +58,9 @@ apps/fainance_app/macos/Flutter/ephemeral/
 
 # Web
 apps/fainance_app/lib/generated_plugin_registrant.dart
+
+# Python
+fainance-backend/venv/
+fainance-backend/__pycache__/
+fainance-backend/*.pyc
+fainance-backend/finance.db
