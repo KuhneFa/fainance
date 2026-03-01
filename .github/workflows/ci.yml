@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Backend Tests ─────────────────────────────────────────────────────────────
+  backend-tests:
+    name: Backend Tests (Python)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          # Cache: pip lädt Dependencies nur neu wenn requirements.txt sich ändert
+          cache: "pip"
+          cache-dependency-path: fainance-backend/requirements.txt
+
+      - name: Dependencies installieren
+        working-directory: fainance-backend
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+
+      - name: Tests ausführen
+        working-directory: fainance-backend
+        run: |
+          pytest tests/ -v --tb=short
+
+  # ── Backend Lint ──────────────────────────────────────────────────────────────
+  backend-lint:
+    name: Backend Lint (Ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ruff installieren
+        run: pip install ruff
+
+      - name: Lint prüfen
+        working-directory: fainance-backend
+        # Ruff ist ein extrem schneller Python-Linter (in Rust geschrieben).
+        # Er ersetzt flake8, isort und teilweise black.
+        run: ruff check . --select E,F,W,I
+
+  # ── Flutter Build Check ───────────────────────────────────────────────────────
+  flutter-build:
+    name: Flutter Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Flutter einrichten
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.27.0"
+          channel: "stable"
+          cache: true
+
+      - name: Dependencies installieren
+        working-directory: apps/fainance_app
+        run: flutter pub get
+
+      - name: Analyse (Dart Analyzer)
+        working-directory: apps/fainance_app
+        # Dart Analyzer = TypeScript's tsc — findet Typ-Fehler vor dem Build
+        run: flutter analyze
+
+      - name: Tests
+        working-directory: apps/fainance_app
+        run: flutter test

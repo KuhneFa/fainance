@@ -48,6 +48,20 @@ lib/
     └── stat_card.dart         ← Wiederverwendbare UI-Komponenten
 ```
 
+Start Backend
+```bash
+uvicorn main:app --reload --port 8000
+
+# to reload the application
+uvicorn main:app --reload --port 8000
+```
+
+Start LLM
+```bash
+ollama serve
+ollama pull <model-name>
+```
+
 Start Flutter
 ```bash
 open -a Simulator

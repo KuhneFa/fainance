@@ -11,7 +11,9 @@ logger = logging.getLogger(__name__)
 
 # ── Konfiguration ──────────────────────────────────────────────────────────────
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "mistral:7b-instruct-q4_0"
+OLLAMA_MODEL = "tinyllama"
+
+#OLLAMA_MODEL = "mistral:7b-instruct-q4_0"
 
 # Wie viele Transaktionen pro LLM-Aufruf. Zu groß = unzuverlässig. Zu klein = langsam.
 BATCH_SIZE = 20
