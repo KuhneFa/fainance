@@ -79,3 +79,8 @@ Update Requirements
 ```bash
 pip3 freeze > requirements.txt
 ```
+
+Execute Docker 
+```bash
+docker-compose up --build
+```

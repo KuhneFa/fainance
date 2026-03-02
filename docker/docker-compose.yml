@@ -1,19 +1,15 @@
-version: "3.9"
-
 services:
 
   # ── FastAPI Backend ───────────────────────────────────────────────────────────
   backend:
     build:
-      context: ../docker/backend/Dockerfile
-      dockerfile: Dockerfile
+      context: ../fainance-backend
+      dockerfile: ../docker/backend/Dockerfile
     ports:
       - "8000:8000"
     environment:
-      # Ollama läuft als eigener Service — kein localhost mehr
       - OLLAMA_BASE_URL=http://ollama:11434
     volumes:
-      # finance.db persistent speichern — überlebt Container-Neustarts
       - finance_data:/app/data
     depends_on:
       ollama:
@@ -26,13 +22,13 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      # Modelle persistent speichern — sonst wird bei jedem Start neu geladen
       - ollama_models:/root/.ollama
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD", "sh", "-c", "cat < /dev/null > /dev/tcp/localhost/11434"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 15s
     restart: unless-stopped
 
 volumes:

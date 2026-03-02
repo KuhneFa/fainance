@@ -138,12 +138,15 @@ class ApiClient {
 // Wird in den Screens verwendet um dem Nutzer sinnvolle Fehler zu zeigen.
 String parseApiError(Object error) {
   if (error is DioException) {
+    if (error.type == DioExceptionType.connectionTimeout) {
+      return 'Keine Verbindung zum Backend. Bitte starte den Server.';
+    }
+    if (error.type == DioExceptionType.receiveTimeout) {
+      return 'Das KI-Modell antwortet nicht (Timeout nach 2 Min).\nIst Ollama gestartet? → ollama serve';
+    }
     if (error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.receiveTimeout) {
       return 'Zeitüberschreitung. Läuft das Backend? (uvicorn main:app)';
-    }
-    if (error.type == DioExceptionType.connectionError) {
-      return 'Keine Verbindung zum Backend. Bitte starte den Server.';
     }
     final data = error.response?.data;
     if (data is Map && data.containsKey('detail')) {
