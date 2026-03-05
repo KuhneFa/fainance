@@ -12,8 +12,7 @@ services:
     volumes:
       - finance_data:/app/data
     depends_on:
-      ollama:
-        condition: service_healthy
+      - ollama
     restart: unless-stopped
 
   # ── Ollama ────────────────────────────────────────────────────────────────────
@@ -23,13 +22,9 @@ services:
       - "11434:11434"
     volumes:
       - ollama_models:/root/.ollama
-    healthcheck:
-      test: ["CMD", "sh", "-c", "cat < /dev/null > /dev/tcp/localhost/11434"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
     restart: unless-stopped
+    # Kein Healthcheck — curl nicht im Ollama-Image verfügbar.
+    # Das Backend prüft Ollama selbst beim Start via check_ollama_health()
 
 volumes:
   finance_data:
