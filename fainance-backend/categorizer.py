@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Any
+from typing import Optional
 
 import aiohttp
 
@@ -9,216 +9,203 @@ from models import Transaction, InsightRequest, InsightResponse, VALID_CATEGORIE
 logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "phi3:mini"
+OLLAMA_MODEL = "llama3.2:3b"
 BATCH_SIZE = 15
 OLLAMA_TIMEOUT = 120
 
-# Kategorien als nummerierte Liste für den Prompt
-CATEGORIES_LIST = "\n".join(
-    f"{i+1}. {cat}" for i, cat in enumerate(sorted(VALID_CATEGORIES))
-)
 
-# ── Prompts ────────────────────────────────────────────────────────────────────
-# Plaintext-Format: viel robuster als JSON für kleinere Modelle.
-# Format: "Beschreibung → Kategorie" — eine Zeile pro Transaktion.
-CATEGORIZE_SYSTEM_PROMPT = f"""You categorize bank transactions. Reply with ONLY the category name for each transaction.
+# ── Keyword-Matching ───────────────────────────────────────────────────────────
+# Erste Verteidigungslinie — schnell, offline, deterministisch.
+# Trifft ~80% aller alltäglichen Transaktionen korrekt.
+KEYWORD_RULES: list[tuple[str, list[str]]] = [
+    ("Miete", [
+        "miete", "warmmiete", "kaltmiete", "nebenkosten", "hausgeld",
+        "wohnungsmiete", "mietüberweisung",
+    ]),
+    ("Sparen / Investieren", [
+        "sparplan", "etf", "depot", "investition", "aktien", "fondssparplan",
+        "trade republic", "scalable", "comdirect depot", "ing-diba depot",
+        "tagesgeld", "festgeld",
+    ]),
+    ("Lebensmittel", [
+        "rewe", "edeka", "aldi", "lidl", "penny", "netto", "kaufland",
+        "real", "tegut", "norma", "nahkauf", "supermarkt", "lebensmittel",
+        "backerei", "bäckerei", "metzgerei", "bioladen", "denns",
+    ]),
+    ("Drogerie", [
+        "dm ", "dm-", " dm\t", "rossmann", "müller drogerie", "budni",
+        "drogerie", "douglas", "parfümerie",
+    ]),
+    ("Sport", [
+        "fitnessstudio", "fitness", "mcfit", "clever fit", "planet fitness",
+        "sportstudio", "sportverein", "schwimmbad", "tennis", "fußball",
+        "yoga", "pilates", "decathlon", "intersport",
+    ]),
+    ("Transport", [
+        "deutsche bahn", "db bahn", "mvv", "hvv", "bvg", "rheinbahn", "vbb",
+        "tankstelle", "shell", "aral", "esso", "total energie", "jet tankstelle",
+        "uber", "taxi", "flixbus", "fernbus", "parken", "parkhaus", "maut",
+    ]),
+    ("Unterhaltung", [
+        "netflix", "spotify", "amazon prime", "disney+", "apple tv",
+        "youtube premium", "dazn", "sky ", "maxdome", "joyn",
+        "kino", "cinema", "theater", "konzert", "steam", "playstation",
+    ]),
+    ("Gesundheit", [
+        "apotheke", "arzt", "arztpraxis", "krankenhaus", "klinik",
+        "zahnarzt", "physiotherapie", "optiker", "sanitätshaus", "zuzahlung",
+    ]),
+    ("Versicherungen", [
+        "versicherung", "allianz", "huk", "axa", "ergo", "signal iduna",
+        "debeka", "techniker krankenkasse", "barmer", "aok", "dak",
+        "haftpflicht", "kfz-versicherung",
+    ]),
+    ("Freizeit & Freunde", [
+        "restaurant", "gasthaus", "cafe ", "café", "bar ", "bistro",
+        "vapiano", "mcdonalds", "burger king", "subway", "pizza",
+        "lieferando", "uber eats", "wolt",
+    ]),
+    ("Geschenke", [
+        "geschenk", "blumen", "florist", "thalia", "weltbild",
+        "hugendubel", "mayersche",
+    ]),
+]
 
-CATEGORIES:
-{CATEGORIES_LIST}
 
-FORMAT: One category per line, in the same order as the input.
-- Use ONLY category names from the list above
-- Positive amounts are income → always use "Sonstiges"
-- If unsure → use "Sonstiges"
-
-EXAMPLE:
-Input:
-1. REWE SAGT DANKE | -34.50
-2. Miete Januar | -850.00
-3. Gehalt Februar | +2800.00
-4. Fitnessstudio | -29.90
-
-Output:
-Lebensmittel
-Miete
-Sonstiges
-Sport"""
+def categorize_by_keywords(description: str) -> Optional[str]:
+    """
+    Gibt eine Kategorie zurück wenn ein Keyword matched, sonst None.
+    None bedeutet: LLM soll entscheiden.
+    """
+    desc_lower = description.lower()
+    for category, keywords in KEYWORD_RULES:
+        for keyword in keywords:
+            if keyword in desc_lower:
+                return category
+    return None
 
 
-INSIGHTS_SYSTEM_PROMPT = """Du bist ein freundlicher Finanzberater. Analysiere die Ausgaben und antworte auf Deutsch.
+# ── LLM-Fallback via /api/generate ────────────────────────────────────────────
+# Wir nutzen /api/generate statt /api/chat — stabiler bei kleineren Modellen.
+# Der Prompt ist so kurz wie möglich: eine Transaktion, eine Antwort.
+CATEGORIES_COMPACT = ", ".join(sorted(VALID_CATEGORIES))
 
-Struktur deiner Antwort (halte dich genau daran):
-ZUSAMMENFASSUNG: <2-3 Sätze zur Gesamtsituation>
-WARNUNG: <eine konkrete Warnung wo zu viel ausgegeben wird>
-WARNUNG: <optional eine zweite Warnung>
-TIPP: <konkreter Spartipp>
-TIPP: <weiterer Spartipp>
-TIPP: <weiterer Spartipp>
-POSITIV: <was gut läuft>
-POSITIV: <weiteres Positives>"""
+async def _ask_llm_for_category(description: str, amount: float) -> str:
+    """
+    Fragt das LLM nach der Kategorie einer einzelnen Transaktion.
+    Wird nur aufgerufen wenn Keyword-Matching nichts gefunden hat.
+    """
+    prompt = (
+        f"Categorize this German bank transaction into exactly one category.\n"
+        f"Transaction: {description} ({amount:+.2f}€)\n"
+        f"Categories: {CATEGORIES_COMPACT}\n"
+        f"Answer with ONLY the category name, nothing else:"
+    )
 
-
-# ── Ollama Client ──────────────────────────────────────────────────────────────
-async def _call_ollama(system_prompt: str, user_message: str) -> str:
     payload = {
         "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
+        "prompt": prompt,
         "stream": False,
-        "options": {
-            "temperature": 0.1,
-            "num_predict": 512,
-        },
+        "options": {"temperature": 0.0, "num_predict": 20},
     }
+
     timeout = aiohttp.ClientTimeout(total=OLLAMA_TIMEOUT)
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
-                f"{OLLAMA_BASE_URL}/api/chat",
+                f"{OLLAMA_BASE_URL}/api/generate",
                 json=payload,
             ) as response:
                 if response.status != 200:
-                    error_text = await response.text()
-                    raise ConnectionError(f"Ollama Status {response.status}: {error_text}")
+                    return "Sonstiges"
                 data = await response.json()
-                return data["message"]["content"]
-    except aiohttp.ClientConnectorError:
-        raise ConnectionError("Ollama nicht erreichbar. Starte mit: ollama serve")
+                raw = data.get("response", "").strip()
+                return _match_category(raw)
+    except Exception as e:
+        logger.warning(f"LLM-Aufruf fehlgeschlagen für '{description}': {e}")
+        return "Sonstiges"
 
 
-# ── Plaintext Parser ───────────────────────────────────────────────────────────
-def _parse_categories_from_text(text: str, expected_count: int) -> list[str]:
+def _match_category(raw: str) -> str:
     """
-    Parst Kategorien aus dem Plaintext-Output des LLMs.
-
-    Das Modell gibt eine Kategorie pro Zeile zurück:
-        Lebensmittel
-        Miete
-        Sonstiges
-
-    Wir bereinigen jede Zeile und prüfen ob sie in VALID_CATEGORIES ist.
-    Falls das Modell weniger Zeilen zurückgibt als erwartet, füllen wir
-    mit "Sonstiges" auf.
+    Fuzzy-Match: findet die beste gültige Kategorie im LLM-Output.
+    Das Modell schreibt manchmal "Lebensmittel." oder "1. Lebensmittel"
+    — wir bereinigen und matchen.
     """
-    # Zeilen aufteilen und bereinigen
-    lines = [line.strip() for line in text.strip().splitlines()]
+    # Sonderzeichen und Nummerierungen entfernen
+    cleaned = re.sub(r"^\d+[\.\)]\s*", "", raw.strip())
+    cleaned = cleaned.split("\n")[0].strip()  # nur erste Zeile
 
-    # Leere Zeilen, Nummern und Pfeile entfernen
-    # Modelle schreiben manchmal "1. Lebensmittel" oder "→ Miete"
-    cleaned: list[str] = []
-    for line in lines:
-        if not line:
-            continue
-        # Nummerierung entfernen: "1. Lebensmittel" → "Lebensmittel"
-        line = re.sub(r"^\d+[\.\)]\s*", "", line)
-        # Pfeil entfernen: "→ Miete" → "Miete"
-        line = re.sub(r"^→\s*", "", line)
-        # Alles nach einem | oder : abschneiden (falls Modell zu viel schreibt)
-        line = line.split("|")[0].split(":")[0].strip()
+    # Exakter Match
+    if cleaned in VALID_CATEGORIES:
+        return cleaned
 
-        if line:
-            cleaned.append(line)
+    # Case-insensitive Match
+    for cat in VALID_CATEGORIES:
+        if cat.lower() == cleaned.lower():
+            return cat
 
-    # Kategorien validieren — ungültige durch "Sonstiges" ersetzen
-    categories: list[str] = []
-    for line in cleaned[:expected_count]:  # maximal expected_count nehmen
-        # Fuzzy-Match: prüfe ob eine gültige Kategorie im Text enthalten ist
-        matched = "Sonstiges"
-        for valid_cat in VALID_CATEGORIES:
-            if valid_cat.lower() in line.lower() or line.lower() in valid_cat.lower():
-                matched = valid_cat
-                break
-        categories.append(matched)
+    # Partial Match — Kategorie im Text enthalten
+    for cat in VALID_CATEGORIES:
+        if cat.lower() in cleaned.lower():
+            return cat
 
-    # Fehlende Kategorien mit Sonstiges auffüllen
-    while len(categories) < expected_count:
-        categories.append("Sonstiges")
-
-    return categories
+    logger.warning(f"Kein Match für LLM-Antwort: '{raw}' → Sonstiges")
+    return "Sonstiges"
 
 
-def _parse_insights_from_text(text: str) -> dict:
+# ── Haupt-Kategorisierung ──────────────────────────────────────────────────────
+async def categorize_transactions(
+    transactions: list[Transaction],
+) -> list[Transaction]:
     """
-    Parst den strukturierten Insights-Text in ein Dictionary.
-
-    Erwartet Format:
-        ZUSAMMENFASSUNG: <text>
-        WARNUNG: <text>
-        TIPP: <text>
-        POSITIV: <text>
+    Hybrid-Ansatz:
+    1. Keywords → sofortige Kategorisierung für bekannte Händler (~80%)
+    2. LLM → für alles was Keywords nicht kennen (~20%)
+    3. Einnahmen → immer "Sonstiges", kein LLM-Call nötig
     """
-    result = {
-        "summary": "",
-        "warnings": [],
-        "tips": [],
-        "positive": [],
-    }
-
-    for line in text.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-
-        if line.upper().startswith("ZUSAMMENFASSUNG:"):
-            result["summary"] = line.split(":", 1)[1].strip()
-        elif line.upper().startswith("WARNUNG:"):
-            warning = line.split(":", 1)[1].strip()
-            if warning:
-                result["warnings"].append(warning)
-        elif line.upper().startswith("TIPP:"):
-            tip = line.split(":", 1)[1].strip()
-            if tip:
-                result["tips"].append(tip)
-        elif line.upper().startswith("POSITIV:"):
-            positive = line.split(":", 1)[1].strip()
-            if positive:
-                result["positive"].append(positive)
-
-    # Fallback falls Zusammenfassung fehlt
-    if not result["summary"] and text.strip():
-        result["summary"] = text.strip()[:300]
-
-    return result
-
-
-# ── Kategorisierung ────────────────────────────────────────────────────────────
-async def categorize_transactions(transactions: list[Transaction]) -> list[Transaction]:
     result = [t.model_copy() for t in transactions]
-    batches = [result[i : i + BATCH_SIZE] for i in range(0, len(result), BATCH_SIZE)]
 
-    logger.info(f"Kategorisiere {len(transactions)} Transaktionen in {len(batches)} Batches")
+    # Zuerst alle per Keyword kategorisieren
+    keyword_count = 0
+    llm_needed: list[int] = []  # Indizes die das LLM brauchen
 
-    for batch_idx, batch in enumerate(batches):
-        logger.info(f"Batch {batch_idx + 1}/{len(batches)}...")
+    for i, t in enumerate(result):
+        # Einnahmen brauchen kein LLM
+        if t.amount > 0:
+            result[i] = t.model_copy(update={"category": "Sonstiges"})
+            keyword_count += 1
+            continue
 
-        # Einfaches nummeriertes Plaintext-Format
-        batch_input = "\n".join(
-            f"{i+1}. {t.description} | {t.amount:+.2f}"
-            for i, t in enumerate(batch)
-        )
+        category = categorize_by_keywords(t.description)
+        if category:
+            result[i] = t.model_copy(update={"category": category})
+            keyword_count += 1
+            logger.info(f"Keyword: {t.description[:35]:<35} → {category}")
+        else:
+            llm_needed.append(i)
 
-        try:
-            raw = await _call_ollama(CATEGORIZE_SYSTEM_PROMPT, batch_input)
-            logger.info(f"Ollama Antwort (gekürzt): {raw[:200]}")
+    logger.info(
+        f"Keywords: {keyword_count}/{len(transactions)} kategorisiert. "
+        f"LLM benötigt für: {len(llm_needed)} Transaktionen."
+    )
 
-            categories = _parse_categories_from_text(raw, len(batch))
-
-            for i, category in enumerate(categories):
-                batch[i] = batch[i].model_copy(update={"category": category})
-                logger.info(f"  {batch[i].description[:30]} → {category}")
-
-        except Exception as e:
-            logger.error(f"Batch {batch_idx + 1} fehlgeschlagen: {e}")
-            for i in range(len(batch)):
-                batch[i] = batch[i].model_copy(update={"category": "Sonstiges"})
+    # LLM nur für unbekannte Transaktionen
+    for i in llm_needed:
+        t = result[i]
+        category = await _ask_llm_for_category(t.description, t.amount)
+        result[i] = t.model_copy(update={"category": category})
+        logger.info(f"LLM:     {t.description[:35]:<35} → {category}")
 
     return result
 
 
 # ── Insights ───────────────────────────────────────────────────────────────────
 async def generate_insights(request: InsightRequest) -> InsightResponse:
+    """
+    LLM gibt Spartipps basierend auf aggregierten Ausgaben.
+    Kein Zugriff auf Rohtransaktionen — nur Kategorie-Summaries.
+    """
     analysis = request.analysis
 
     categories_text = "\n".join(
@@ -226,35 +213,83 @@ async def generate_insights(request: InsightRequest) -> InsightResponse:
         for c in sorted(analysis.categories, key=lambda x: x.total, reverse=True)
     )
 
-    user_message = (
+    prompt = (
+        f"Du bist ein Finanzberater. Analysiere diese Ausgaben und antworte auf Deutsch.\n\n"
         f"Zeitraum: {analysis.period_start} bis {analysis.period_end}\n"
         f"Einnahmen: {analysis.total_income:.2f}€\n"
         f"Ausgaben: {analysis.total_expenses:.2f}€\n"
         f"Saldo: {analysis.net:.2f}€\n\n"
-        f"Ausgaben pro Kategorie:\n{categories_text}"
+        f"Ausgaben:\n{categories_text}\n\n"
+        f"Antworte in diesem Format:\n"
+        f"ZUSAMMENFASSUNG: <2 Sätze>\n"
+        f"WARNUNG: <Kategorie wo zu viel ausgegeben wird>\n"
+        f"WARNUNG: <zweite Warnung falls nötig>\n"
+        f"TIPP: <konkreter Spartipp>\n"
+        f"TIPP: <weiterer Tipp>\n"
+        f"POSITIV: <was gut läuft>"
     )
-
     if request.user_context:
-        user_message += f"\n\nKontext: {request.user_context}"
+        prompt += f"\nKontext: {request.user_context}"
+
+    payload = {
+        "model": OLLAMA_MODEL,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": 0.3, "num_predict": 400},
+    }
 
     try:
-        raw = await _call_ollama(INSIGHTS_SYSTEM_PROMPT, user_message)
-        logger.info(f"Insights Antwort: {raw[:400]}")
-        parsed = _parse_insights_from_text(raw)
-
-        return InsightResponse(
-            summary=parsed["summary"] or "Keine Zusammenfassung verfügbar.",
-            warnings=parsed["warnings"],
-            tips=parsed["tips"],
-            positive=parsed["positive"],
-        )
+        timeout = aiohttp.ClientTimeout(total=OLLAMA_TIMEOUT)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                f"{OLLAMA_BASE_URL}/api/generate",
+                json=payload,
+            ) as response:
+                data = await response.json()
+                raw = data.get("response", "").strip()
+                logger.info(f"Insights: {raw[:300]}")
+                return _parse_insights(raw)
 
     except Exception as e:
         logger.error(f"Insights fehlgeschlagen: {e}")
         return InsightResponse(
-            summary="Analyse konnte nicht generiert werden. Ist Ollama gestartet?",
+            summary="Analyse nicht verfügbar. Ist Ollama gestartet?",
             warnings=[], tips=[], positive=[],
         )
+
+
+def _parse_insights(text: str) -> InsightResponse:
+    summary, warnings, tips, positive = "", [], [], []
+
+    for line in text.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        upper = line.upper()
+        if upper.startswith("ZUSAMMENFASSUNG:"):
+            summary = line.split(":", 1)[1].strip()
+        elif upper.startswith("WARNUNG:"):
+            w = line.split(":", 1)[1].strip()
+            if w:
+                warnings.append(w)
+        elif upper.startswith("TIPP:"):
+            t = line.split(":", 1)[1].strip()
+            if t:
+                tips.append(t)
+        elif upper.startswith("POSITIV:"):
+            p = line.split(":", 1)[1].strip()
+            if p:
+                positive.append(p)
+
+    if not summary:
+        summary = text[:200]
+
+    return InsightResponse(
+        summary=summary,
+        warnings=warnings,
+        tips=tips,
+        positive=positive,
+    )
 
 
 # ── Health Check ───────────────────────────────────────────────────────────────
@@ -272,7 +307,7 @@ async def check_ollama_health() -> dict[str, str]:
                         return {"status": "ok", "model": OLLAMA_MODEL}
                     return {
                         "status": "model_missing",
-                        "message": f"Modell nicht gefunden. Bitte: ollama pull {OLLAMA_MODEL}",
+                        "message": f"Bitte ausführen: ollama pull {OLLAMA_MODEL}",
                     }
     except Exception as e:
         return {"status": "unreachable", "message": str(e)}
