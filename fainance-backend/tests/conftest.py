@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 
 # fainance-backend/ zum Python-Pfad hinzufügen damit
 # `from models import ...` in den Tests funktioniert

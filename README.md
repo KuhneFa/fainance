@@ -1,5 +1,5 @@
 # fainance
-Application to analyse your own finances privately and secure
+Application to analyse your own finances privately and secure. Automated ordering of transactions based on keywords and improved by using a local LLM. Additionally a locally hosted LLM can give you tips about how you spend your money. No guarantees for nothing. There will be mistakes. Goal is that no big LLM company is getting your financial data. Only you and your phone. Claude Sonnet 4.6 was used to build this app.
 
 # Architecture
 ```text

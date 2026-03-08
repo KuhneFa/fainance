@@ -2,22 +2,20 @@
 Tests für den CSV-Parser und die Datenmodelle.
 Ausführen mit: pytest tests/ -v
 """
-import pytest
 from datetime import date
 
-from models import Transaction, AnalysisResult, CategorySummary, VALID_CATEGORIES
-from parser import parse_csv, parse_amount, parse_date, detect_bank_format, BANK_FORMATS
+import pytest
+
+from models import VALID_CATEGORIES, Transaction
+from parser import detect_bank_format, parse_amount, parse_csv, parse_date
 
 
-# ── Hilfsfunktionen ────────────────────────────────────────────────────────────
 def make_sparkasse_csv(rows: list[str]) -> bytes:
-    """Erstellt eine minimale Sparkasse-CSV als Bytes."""
     header = "Buchungstag;Verwendungszweck;Betrag (EUR)"
     content = "\n".join([header] + rows)
     return content.encode("utf-8")
 
 
-# ── Model Tests ────────────────────────────────────────────────────────────────
 class TestTransaction:
     def test_valid_transaction(self):
         t = Transaction(date=date(2024, 1, 1), description="REWE", amount=-34.50)
@@ -53,14 +51,13 @@ class TestTransaction:
 
     def test_is_expense(self):
         t = Transaction(date=date(2024, 1, 1), description="Test", amount=-10.0)
-        assert t.isExpense if hasattr(t, 'isExpense') else t.amount < 0
+        assert t.amount < 0
 
     def test_is_income(self):
         t = Transaction(date=date(2024, 1, 1), description="Gehalt", amount=2800.0)
         assert t.amount > 0
 
 
-# ── Parser Tests ───────────────────────────────────────────────────────────────
 class TestParseAmount:
     def test_german_format(self):
         assert parse_amount("1.234,56", ",", ".") == 1234.56
@@ -132,7 +129,7 @@ class TestParseCsv:
     def test_skips_empty_lines(self):
         csv_bytes = make_sparkasse_csv([
             "01.01.24;REWE;-34,50",
-            "",  # leere Zeile
+            "",
             "03.01.24;Miete;-850,00",
         ])
         transactions = parse_csv(csv_bytes)
@@ -150,7 +147,7 @@ class TestParseCsv:
 
     def test_descriptions_are_cleaned(self):
         csv_bytes = make_sparkasse_csv([
-            "01.01.24;REWE   SAGT   DANKE;-34,50",  # mehrfache Leerzeichen
+            "01.01.24;REWE   SAGT   DANKE;-34,50",
         ])
         transactions = parse_csv(csv_bytes)
         assert transactions[0].description == "REWE SAGT DANKE"
