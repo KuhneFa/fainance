@@ -214,7 +214,9 @@ async def generate_insights(request: InsightRequest) -> InsightResponse:
     )
 
     prompt = (
-        f"Du bist ein Finanzberater. Analysiere diese Ausgaben und antworte auf Deutsch.\n\n"
+        f"Du bist ein Finanzberater." 
+        f"Analysiere diese Ausgaben." 
+        f"Antworte auf Deutsch.\n\n"
         f"Zeitraum: {analysis.period_start} bis {analysis.period_end}\n"
         f"Einnahmen: {analysis.total_income:.2f}€\n"
         f"Ausgaben: {analysis.total_expenses:.2f}€\n"

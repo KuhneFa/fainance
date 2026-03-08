@@ -118,7 +118,7 @@ class ApiClient {
           'period_start': analysis.periodStart.toIso8601String().split('T')[0],
           'period_end': analysis.periodEnd.toIso8601String().split('T')[0],
         },
-        if (userContext != null) 'user_context': userContext,
+        'user_context': ?userContext,
       },
     );
     return InsightResponse.fromJson(response.data as Map<String, dynamic>);

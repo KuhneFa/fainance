@@ -34,7 +34,6 @@ void main() async {
   runApp(const FinanceApp());
 }
 
-
 class FinanceApp extends StatelessWidget {
   const FinanceApp({super.key});
 
@@ -80,9 +79,9 @@ class FinanceApp extends StatelessWidget {
 
         return PageRouteBuilder(
           settings: settings,
-          pageBuilder: (context, _, __) => builder(context),
-          transitionsBuilder: (context, animation, _, child) {
-            // Slide von rechts nach links — Standard Mobile-Pattern
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              builder(context),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return SlideTransition(
               position: Tween<Offset>(
                 begin: const Offset(1, 0),

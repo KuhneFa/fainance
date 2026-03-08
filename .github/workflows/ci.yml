@@ -26,8 +26,8 @@ jobs:
         # --fix behebt alle auto-fixbaren Fehler (Imports, Newlines, f-strings)
         # Danach nochmal check — falls unfixbare Fehler übrig bleiben schlägt CI fehl
         run: |
-          ruff check . --select E,F,W,I --fix
-          ruff check . --select E,F,W,I
+          ruff check . --fix
+          ruff check .
 
   # ── Backend Unit Tests ────────────────────────────────────────────────────────
   backend-unit-tests:

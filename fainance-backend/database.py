@@ -56,7 +56,7 @@ def init_db() -> None:
         # So kannst du später mehrere Uploads verwalten und vergleichen.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS upload_sessions (
-                id          TEXT    PRIMARY KEY,        -- UUID, wird in main.py generiert
+                id          TEXT    PRIMARY KEY,        -- UUID
                 filename    TEXT    NOT NULL,
                 uploaded_at TEXT    NOT NULL,           -- ISO 8601 Timestamp
                 row_count   INTEGER NOT NULL
@@ -145,8 +145,10 @@ def get_analysis(upload_id: str) -> AnalysisResult:
         totals = conn.execute(
             """
             SELECT
-                COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS income,
-                COALESCE(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END), 0) AS expenses,
+                COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) 
+                AS income,
+                COALESCE(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END), 0) 
+                AS expenses,
                 MIN(date) AS period_start,
                 MAX(date) AS period_end
             FROM transactions

@@ -8,21 +8,21 @@ class AppColors {
   AppColors._(); // privater Konstruktor: diese Klasse soll nie instanziiert werden
 
   // Hintergründe
-  static const background = Color(0xFF0A0A0A);      // fast schwarz
-  static const surface = Color(0xFF111111);          // Cards, Sheets
-  static const surfaceElevated = Color(0xFF1A1A1A);  // elevated Cards
-  static const border = Color(0xFF262626);           // subtile Trennlinien
+  static const background = Color(0xFF0A0A0A); // fast schwarz
+  static const surface = Color(0xFF111111); // Cards, Sheets
+  static const surfaceElevated = Color(0xFF1A1A1A); // elevated Cards
+  static const border = Color(0xFF262626); // subtile Trennlinien
 
   // Akzentfarben
-  static const primary = Color(0xFFFFFFFF);          // weiß für Headlines
-  static const secondary = Color(0xFF888888);        // grau für Subtexte
-  static const accent = Color(0xFF3B82F6);           // blau für CTAs
+  static const primary = Color(0xFFFFFFFF); // weiß für Headlines
+  static const secondary = Color(0xFF888888); // grau für Subtexte
+  static const accent = Color(0xFF3B82F6); // blau für CTAs
 
   // Semantische Farben (für Charts und Status)
-  static const income = Color(0xFF22C55E);           // grün für Einnahmen
-  static const expense = Color(0xFFEF4444);          // rot für Ausgaben
-  static const warning = Color(0xFFF59E0B);          // gelb für Warnungen
-  static const positive = Color(0xFF22C55E);         // grün für positives Feedback
+  static const income = Color(0xFF22C55E); // grün für Einnahmen
+  static const expense = Color(0xFFEF4444); // rot für Ausgaben
+  static const warning = Color(0xFFF59E0B); // gelb für Warnungen
+  static const positive = Color(0xFF22C55E); // grün für positives Feedback
 
   // Chart-Farben — genug für alle Kategorien, harmonisch abgestimmt
   static const chartColors = [
@@ -54,7 +54,6 @@ class AppTheme {
       brightness: Brightness.dark,
       scaffoldBackgroundColor: AppColors.background,
       colorScheme: const ColorScheme.dark(
-        background: AppColors.background,
         surface: AppColors.surface,
         primary: AppColors.accent,
         onPrimary: AppColors.primary,

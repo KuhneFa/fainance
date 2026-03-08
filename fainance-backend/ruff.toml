@@ -1,0 +1,9 @@
+# Ruff Konfiguration für fainance-backend
+line-length = 100  # Standard 88 ist für SQL-Strings zu eng
+
+[lint]
+select = ["E", "F", "W", "I"]
+
+# E501 in SQL-Strings und Kommentaren ist schwer zu vermeiden
+# Wir ignorieren es für Strings die SQL oder Prompts enthalten
+ignore = []
