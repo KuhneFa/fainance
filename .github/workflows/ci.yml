@@ -26,7 +26,7 @@ jobs:
         # --fix behebt alle auto-fixbaren Fehler (Imports, Newlines, f-strings)
         # Danach nochmal check — falls unfixbare Fehler übrig bleiben schlägt CI fehl
         run: |
-          ruff check . --fix
+          ruff check . --fix --unsafe-fixes
           ruff check .
 
   # ── Backend Unit Tests ────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ jobs:
       - name: Flutter einrichten
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.24.0"  # stabile Version die Dart 3.6 nutzt
+          flutter-version: "3.27.0"  # stabile Version die Dart 3.6 nutzt
           channel: "stable"
           cache: true
 
