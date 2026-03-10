@@ -112,7 +112,7 @@ jobs:
 
       - name: Dart Analyzer
         working-directory: apps/fainance_app
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze --fatal-infos --fatal-warnings
 
       - name: Tests
         working-directory: apps/fainance_app
