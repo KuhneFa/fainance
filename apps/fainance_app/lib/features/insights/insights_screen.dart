@@ -31,14 +31,14 @@ class InsightsState extends ChangeNotifier {
 
 enum LoadingStatus { loading, success, error }
 
-
 // ── Insights Screen ────────────────────────────────────────────────────────────
 class InsightsScreen extends StatelessWidget {
   const InsightsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final analysis = ModalRoute.of(context)!.settings.arguments as AnalysisResult;
+    final analysis =
+        ModalRoute.of(context)!.settings.arguments as AnalysisResult;
 
     return ChangeNotifierProvider(
       create: (_) => InsightsState()..load(analysis),
@@ -64,7 +64,6 @@ class _InsightsView extends StatelessWidget {
     );
   }
 }
-
 
 // ── Loading ────────────────────────────────────────────────────────────────────
 class _LoadingView extends StatelessWidget {
@@ -99,7 +98,6 @@ class _LoadingView extends StatelessWidget {
   }
 }
 
-
 // ── Error ──────────────────────────────────────────────────────────────────────
 class _ErrorView extends StatelessWidget {
   final String message;
@@ -126,7 +124,6 @@ class _ErrorView extends StatelessWidget {
     );
   }
 }
-
 
 // ── Success ────────────────────────────────────────────────────────────────────
 class _SuccessView extends StatelessWidget {
@@ -230,7 +227,6 @@ class _SuccessView extends StatelessWidget {
   }
 }
 
-
 // ── Wiederverwendbare Komponenten ──────────────────────────────────────────────
 
 class _SectionCard extends StatelessWidget {
@@ -289,7 +285,6 @@ class _SectionCard extends StatelessWidget {
     );
   }
 }
-
 
 class _InsightList extends StatelessWidget {
   final List<String> items;

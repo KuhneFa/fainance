@@ -39,7 +39,8 @@ class UploadState extends ChangeNotifier {
       allowMultiple: false,
     );
 
-    if (result == null || result.files.isEmpty) return; // Nutzer hat abgebrochen
+    if (result == null || result.files.isEmpty)
+      return; // Nutzer hat abgebrochen
 
     final file = result.files.single;
     if (file.path == null) {
@@ -68,7 +69,6 @@ class UploadState extends ChangeNotifier {
       transactionCount = response.transactionCount;
       status = UploadStatus.success;
       notifyListeners();
-
     } on Exception catch (e) {
       _setError(parseApiError(e));
     }
@@ -91,7 +91,6 @@ class UploadState extends ChangeNotifier {
 }
 
 enum UploadStatus { idle, uploading, success, error }
-
 
 // ── Upload Screen ──────────────────────────────────────────────────────────────
 class UploadScreen extends StatelessWidget {
@@ -142,12 +141,11 @@ class _UploadView extends StatelessWidget {
   }
 }
 
-
 // ── Idle: Datei auswählen ──────────────────────────────────────────────────────
 class _IdleView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<UploadState>();
+    //final state = context.watch<UploadState>();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,7 +193,6 @@ class _IdleView extends StatelessWidget {
     );
   }
 }
-
 
 class _UploadDropZone extends StatelessWidget {
   @override
@@ -250,7 +247,6 @@ class _UploadDropZone extends StatelessWidget {
   }
 }
 
-
 class _BankSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -284,7 +280,6 @@ class _BankSelector extends StatelessWidget {
   }
 }
 
-
 class _PrivacyNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -302,7 +297,10 @@ class _PrivacyNote extends StatelessWidget {
           Expanded(
             child: Text(
               'Deine Daten verlassen nie dieses Gerät. Die Analyse läuft lokal.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(fontSize: 12),
             ),
           ),
         ],
@@ -310,7 +308,6 @@ class _PrivacyNote extends StatelessWidget {
     );
   }
 }
-
 
 // ── Uploading: Fortschritt ─────────────────────────────────────────────────────
 class _UploadingView extends StatelessWidget {
@@ -350,7 +347,6 @@ class _UploadingView extends StatelessWidget {
   }
 }
 
-
 // ── Success ────────────────────────────────────────────────────────────────────
 class _SuccessView extends StatelessWidget {
   @override
@@ -376,7 +372,8 @@ class _SuccessView extends StatelessWidget {
 
         Text(
           '${state.transactionCount} Transaktionen\nverarbeitet.',
-          style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28),
+          style:
+              Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28),
         ),
         const SizedBox(height: 8),
         Text(
@@ -413,7 +410,6 @@ class _SuccessView extends StatelessWidget {
   }
 }
 
-
 // ── Error ──────────────────────────────────────────────────────────────────────
 class _ErrorView extends StatelessWidget {
   @override
@@ -432,12 +428,14 @@ class _ErrorView extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: AppColors.expense.withOpacity(0.3)),
           ),
-          child: const Icon(Icons.error_outline, color: AppColors.expense, size: 22),
+          child: const Icon(Icons.error_outline,
+              color: AppColors.expense, size: 22),
         ),
         const SizedBox(height: 24),
         Text(
           'Etwas ist\nschiefgelaufen.',
-          style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28),
+          style:
+              Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28),
         ),
         const SizedBox(height: 12),
         Container(
