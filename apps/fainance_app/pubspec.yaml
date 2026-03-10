@@ -34,7 +34,7 @@ dependencies:
   fl_chart: ^1.1.1        # Charts für das Dashboard
   file_picker: ^10.3.10      # CSV-Datei auswählen
   provider: ^6.1.2         # State Management
-  google_fonts: ^8.0.2     # Inter-Schrift (Next.js-Look)
+  google_fonts: ^6.2.1 #^8.0.2     # Inter-Schrift (Next.js-Look)
   intl: ^0.20.2            # Zahlen & Datum formatieren
 
 
