@@ -31,12 +31,11 @@ dependencies:
   flutter:
     sdk: flutter
   dio: ^5.4.0              # HTTP Client (besser als http package)
-  fl_chart: ^1.1.1        # Charts für das Dashboard
-  file_picker: ^10.3.10      # CSV-Datei auswählen
+  fl_chart: ^0.70.2        # Charts für das Dashboard
+  file_picker: ^8.1.7      # CSV-Datei auswählen
   provider: ^6.1.2         # State Management
   google_fonts: ^6.2.1 #^8.0.2     # Inter-Schrift (Next.js-Look)
-  intl: ^0.20.2            # Zahlen & Datum formatieren
-
+  intl: ^0.19.0            # Zahlen & Datum formatieren
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

@@ -9,8 +9,7 @@ import 'models.dart';
 // Für echte Geräte im selben WLAN: IP deines Macs, z.B. `192.168.1.100`.
 // `ifconfig | grep "inet "` auf dem Mac gibt dir die IP.
 // const String _baseUrl = 'http://10.0.2.2:8000'; // Android Emulator
- const String _baseUrl = 'http://localhost:8000'; // iOS Simulator / Web
-
+const String _baseUrl = 'http://localhost:8000'; // iOS Simulator / Web
 
 class ApiClient {
   late final Dio _dio;
@@ -31,7 +30,7 @@ class ApiClient {
     // richtigen Logger ersetzen.
     _dio.interceptors.add(
       LogInterceptor(
-        requestBody: false,   // false: keine Finanzdaten in Logs
+        requestBody: false, // false: keine Finanzdaten in Logs
         responseBody: false,
         logPrint: (obj) => debugPrint('[API] $obj'),
       ),
@@ -118,7 +117,8 @@ class ApiClient {
           'period_start': analysis.periodStart.toIso8601String().split('T')[0],
           'period_end': analysis.periodEnd.toIso8601String().split('T')[0],
         },
-        'user_context': ?userContext,
+        if (userContext != null)
+          'user_context': userContext, //'user_context': ?userContext,
       },
     );
     return InsightResponse.fromJson(response.data as Map<String, dynamic>);
