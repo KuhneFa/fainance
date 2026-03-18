@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: fainance
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP           # nur intern erreichbar
+---
+# NodePort für lokale Entwicklung mit minikube
+# Im Production würde hier ein Ingress stehen
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-nodeport
+  namespace: fainance
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30800       # erreichbar via minikube ip:30800
+  type: NodePort

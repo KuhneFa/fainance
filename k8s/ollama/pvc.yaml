@@ -1,0 +1,13 @@
+# PersistentVolumeClaim für Ollama-Modelle.
+# Modelle sind groß (~2-4GB) — wir wollen sie nicht bei jedem Restart neu laden.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models-pvc
+  namespace: fainance
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi         # Platz für mehrere Modelle

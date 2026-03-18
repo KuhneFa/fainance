@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: fainance
+data:
+  # Ollama läuft nativ auf dem Host — nicht im Cluster.
+  # host.minikube.internal ist der minikube-DNS-Name für localhost des Hosts.
+  OLLAMA_BASE_URL: "http://host.minikube.internal:11434"
+  LOG_LEVEL: "INFO"
