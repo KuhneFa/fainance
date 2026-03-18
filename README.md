@@ -84,3 +84,39 @@ Execute Docker
 ```bash
 docker-compose up --build
 ```
+
+Debugging Colima
+```bash
+colima delete
+colima start --vm-type=qemu
+```
+
+
+# Mit Make Starten
+```bash
+cd fainance          # ins Root-Verzeichnis
+make up              # alles starten
+make down            # alles stoppen
+make dev             # startet Ollama + Backend + Flutter auf einmal
+make ollama          # nur Ollama im Hintergrund
+make backend         # Backend in einem Terminal
+make flutter         # Flutter in einem anderen Terminal
+make test            # Tests
+```
+
+# Naitv Starten
+```bash
+source fainance/bin/activate
+
+# 1. Backend Starten in einem Terminal
+cd fainance-backend
+uvicorn main:app --reload --port 8000
+
+# 2. Ollama Starten in einem separaten Terminal
+ollama serve
+
+# 3. Frontend Starten in einem separaten Terminal
+cd apps/fainance_apps
+flutter run -d chrome
+
+```

@@ -1,65 +1,60 @@
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Optional
 
-from models import Transaction, AnalysisResult, CategorySummary
+from models import AnalysisResult, CategorySummary, InsightResponse, Transaction
 
-# ── Konfiguration ──────────────────────────────────────────────────────────────
-# Die DB-Datei liegt im selben Ordner wie das Backend.
-# Path(__file__) ist der absolute Pfad zu dieser Datei (database.py).
 DB_PATH = Path(__file__).parent / "finance.db"
 
 
-# ── Context Manager für Verbindungen ──────────────────────────────────────────
-# Ein Context Manager (das `with`-Statement) stellt sicher, dass die
-# Datenbankverbindung IMMER geschlossen wird — auch wenn ein Fehler auftritt.
-# Das verhindert "connection leaks", die die DB-Datei sperren können.
 @contextmanager
 def get_connection() -> Generator[sqlite3.Connection, None, None]:
     conn = sqlite3.connect(DB_PATH)
-    # Row factory: gibt Zeilen als dict zurück statt als Tuple.
-    # So kannst du row["amount"] schreiben statt row[2].
     conn.row_factory = sqlite3.Row
-    # Foreign Keys müssen in SQLite explizit aktiviert werden.
     conn.execute("PRAGMA foreign_keys = ON")
     try:
         yield conn
-        conn.commit()   # Änderungen speichern wenn alles gut läuft
+        conn.commit()
     except Exception:
-        conn.rollback() # Änderungen rückgängig machen bei Fehler
+        conn.rollback()
         raise
     finally:
-        conn.close()    # Verbindung IMMER schließen
+        conn.close()
 
 
-# ── Tabellen anlegen ───────────────────────────────────────────────────────────
 def init_db() -> None:
-    """
-    Erstellt alle Tabellen, falls sie noch nicht existieren.
-    Wird beim Start der FastAPI-App aufgerufen.
-    `CREATE TABLE IF NOT EXISTS` ist idempotent — kann beliebig oft
-    aufgerufen werden ohne Fehler oder Datenverlust.
-    """
+    """Erstellt alle Tabellen falls nicht vorhanden."""
     with get_connection() as conn:
+        init_insights_table(conn)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                date        TEXT    NOT NULL,           -- ISO 8601: "2024-03-15"
+                date        TEXT    NOT NULL,
                 description TEXT    NOT NULL,
                 amount      REAL    NOT NULL,
-                category    TEXT,                       -- NULL bis kategorisiert
-                upload_id   TEXT    NOT NULL            -- gruppiert einen CSV-Upload
+                category    TEXT,
+                upload_id   TEXT    NOT NULL
             )
         """)
-        # upload_sessions speichert Metadaten zu jedem CSV-Upload.
-        # So kannst du später mehrere Uploads verwalten und vergleichen.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS upload_sessions (
-                id          TEXT    PRIMARY KEY,        -- UUID
-                filename    TEXT    NOT NULL,
-                uploaded_at TEXT    NOT NULL,           -- ISO 8601 Timestamp
+                id          TEXT PRIMARY KEY,
+                filename    TEXT NOT NULL,
+                uploaded_at TEXT NOT NULL,
                 row_count   INTEGER NOT NULL
+            )
+        """)
+        # Insights werden gecacht — nicht bei jedem Aufruf neu generiert.
+        # Ein Upload hat genau einen Insights-Eintrag.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS insights (
+                upload_id   TEXT PRIMARY KEY,
+                summary     TEXT NOT NULL,
+                warnings    TEXT NOT NULL,
+                tips        TEXT NOT NULL,
+                positive    TEXT NOT NULL,
+                generated_at TEXT NOT NULL
             )
         """)
 
@@ -79,19 +74,8 @@ def save_upload_session(
 
 
 def save_transactions(transactions: list[Transaction], upload_id: str) -> None:
-    """
-    Speichert eine Liste von Transaktionen in einem Batch-Insert.
-    `executemany` ist deutlich schneller als einzelne INSERT-Statements
-    in einer Schleife, weil SQLite nur einmal in die Datei schreibt.
-    """
     rows = [
-        (
-            str(t.date),
-            t.description,
-            t.amount,
-            t.category,
-            upload_id,
-        )
+        (str(t.date), t.description, t.amount, t.category, upload_id)
         for t in transactions
     ]
     with get_connection() as conn:
@@ -104,8 +88,31 @@ def save_transactions(transactions: list[Transaction], upload_id: str) -> None:
         )
 
 
+def save_insights(upload_id: str, insights: InsightResponse) -> None:
+    """
+    Speichert Insights für einen Upload.
+    Listen werden als pipe-separierte Strings gespeichert — einfacher
+    als JSON und ausreichend für unsere Zwecke.
+    """
+    import json
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO insights
+                (upload_id, summary, warnings, tips, positive, generated_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+            """,
+            (
+                upload_id,
+                insights.summary,
+                json.dumps(insights.warnings, ensure_ascii=False),
+                json.dumps(insights.tips, ensure_ascii=False),
+                json.dumps(insights.positive, ensure_ascii=False),
+            ),
+        )
+
+
 def update_transaction_category(transaction_id: int, category: str) -> None:
-    """Wird vom Kategorisierer aufgerufen, nachdem das LLM geantwortet hat."""
     with get_connection() as conn:
         conn.execute(
             "UPDATE transactions SET category = ? WHERE id = ?",
@@ -115,13 +122,11 @@ def update_transaction_category(transaction_id: int, category: str) -> None:
 
 # ── Lesen ──────────────────────────────────────────────────────────────────────
 def get_transactions(upload_id: str) -> list[Transaction]:
-    """Gibt alle Transaktionen eines Uploads zurück."""
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT * FROM transactions WHERE upload_id = ? ORDER BY date DESC",
             (upload_id,),
         ).fetchall()
-
     return [
         Transaction(
             id=row["id"],
@@ -135,20 +140,15 @@ def get_transactions(upload_id: str) -> list[Transaction]:
 
 
 def get_analysis(upload_id: str) -> AnalysisResult:
-    """
-    Berechnet die Analyse direkt in SQL — das ist effizienter als alle
-    Transaktionen zu laden und in Python zu aggregieren.
-    SQL ist für genau solche Aggregationen optimiert.
-    """
+    """Aggregiert Ausgaben direkt in SQL."""
     with get_connection() as conn:
-        # Einnahmen und Ausgaben separat summieren
         totals = conn.execute(
             """
             SELECT
-                COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) 
-                AS income,
-                COALESCE(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END), 0) 
-                AS expenses,
+                COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0)
+                    AS income,
+                COALESCE(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END), 0)
+                    AS expenses,
                 MIN(date) AS period_start,
                 MAX(date) AS period_end
             FROM transactions
@@ -157,7 +157,6 @@ def get_analysis(upload_id: str) -> AnalysisResult:
             (upload_id,),
         ).fetchone()
 
-        # Pro-Kategorie aggregieren (nur Ausgaben, d.h. amount < 0)
         cat_rows = conn.execute(
             """
             SELECT
@@ -167,13 +166,12 @@ def get_analysis(upload_id: str) -> AnalysisResult:
             FROM transactions
             WHERE upload_id = ? AND amount < 0
             GROUP BY category
-            ORDER BY total ASC   -- negativste (größte Ausgabe) zuerst
+            ORDER BY total ASC
             """,
             (upload_id,),
         ).fetchall()
 
-    total_expenses = abs(totals["expenses"])  # als positive Zahl für die UI
-
+    total_expenses = abs(totals["expenses"])
     categories = [
         CategorySummary(
             category=row["category"],
@@ -193,4 +191,81 @@ def get_analysis(upload_id: str) -> AnalysisResult:
         categories=categories,
         period_start=totals["period_start"],
         period_end=totals["period_end"],
+    )
+
+
+def get_cached_insights(upload_id: str) -> Optional[InsightResponse]:
+    """Gibt gecachte Insights zurück, oder None wenn noch keine vorhanden."""
+    import json
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM insights WHERE upload_id = ?",
+            (upload_id,),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    return InsightResponse(
+        summary=row["summary"],
+        warnings=json.loads(row["warnings"]),
+        tips=json.loads(row["tips"]),
+        positive=json.loads(row["positive"]),
+    )
+
+
+# ── Insights Cache ─────────────────────────────────────────────────────────────
+def init_insights_table(conn: sqlite3.Connection) -> None:
+    """Insights-Tabelle erstellen — wird von init_db() aufgerufen."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS insights_cache (
+            upload_id   TEXT PRIMARY KEY,
+            summary     TEXT NOT NULL,
+            warnings    TEXT NOT NULL,  -- JSON-Array als String
+            tips        TEXT NOT NULL,  -- JSON-Array als String
+            positive    TEXT NOT NULL,  -- JSON-Array als String
+            created_at  TEXT NOT NULL
+        )
+    """)
+
+
+def save_insights(upload_id: str, insights) -> None:
+    """Speichert generierte Insights im Cache."""
+    import json
+    from datetime import datetime, timezone
+
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT OR REPLACE INTO insights_cache
+                (upload_id, summary, warnings, tips, positive, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            upload_id,
+            insights.summary,
+            json.dumps(insights.warnings, ensure_ascii=False),
+            json.dumps(insights.tips, ensure_ascii=False),
+            json.dumps(insights.positive, ensure_ascii=False),
+            datetime.now(timezone.utc).isoformat(),
+        ))
+
+
+def get_cached_insights(upload_id: str):
+    """Gibt gecachte Insights zurück, oder None wenn nicht vorhanden."""
+    import json
+    from models import InsightResponse
+
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM insights_cache WHERE upload_id = ?",
+            (upload_id,),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    return InsightResponse(
+        summary=row["summary"],
+        warnings=json.loads(row["warnings"]),
+        tips=json.loads(row["tips"]),
+        positive=json.loads(row["positive"]),
     )

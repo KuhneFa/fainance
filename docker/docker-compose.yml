@@ -1,10 +1,41 @@
 services:
 
+  # ── Ollama ────────────────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+    # Ollama startet automatisch den Server beim Container-Start.
+    # Das Modell wird beim ersten Request geladen — oder via ollama-init.
+
+  # ── Ollama Model Initializer ──────────────────────────────────────────────────
+  # Einmaliger Container der das Modell in Ollama lädt.
+  # Läuft durch und beendet sich — das ist gewollt (restart: no).
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    volumes:
+      - ollama_models:/root/.ollama
+    entrypoint: >
+      /bin/sh -c "
+        echo 'Warte auf Ollama...' &&
+        sleep 5 &&
+        ollama pull llama3.2:3b &&
+        echo 'Modell geladen.'
+      "
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    restart: "no"
+
   # ── FastAPI Backend ───────────────────────────────────────────────────────────
   backend:
     build:
-      context: ../fainance-backend
-      dockerfile: ../docker/backend/Dockerfile
+      context: ..
+      dockerfile: docker/backend/Dockerfile
     ports:
       - "8000:8000"
     environment:
@@ -14,17 +45,6 @@ services:
     depends_on:
       - ollama
     restart: unless-stopped
-
-  # ── Ollama ────────────────────────────────────────────────────────────────────
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_models:/root/.ollama
-    restart: unless-stopped
-    # Kein Healthcheck — curl nicht im Ollama-Image verfügbar.
-    # Das Backend prüft Ollama selbst beim Start via check_ollama_health()
 
 volumes:
   finance_data:
