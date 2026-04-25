@@ -215,57 +215,17 @@ def get_cached_insights(upload_id: str) -> Optional[InsightResponse]:
 
 
 # ── Insights Cache ─────────────────────────────────────────────────────────────
-def init_insights_table(conn: sqlite3.Connection) -> None:
-    """Insights-Tabelle erstellen — wird von init_db() aufgerufen."""
+
+
+def init_insights_table(conn) -> None:
+    """Insights-Cache-Tabelle erstellen — wird von init_db() aufgerufen."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS insights_cache (
             upload_id   TEXT PRIMARY KEY,
             summary     TEXT NOT NULL,
-            warnings    TEXT NOT NULL,  -- JSON-Array als String
-            tips        TEXT NOT NULL,  -- JSON-Array als String
-            positive    TEXT NOT NULL,  -- JSON-Array als String
+            warnings    TEXT NOT NULL,
+            tips        TEXT NOT NULL,
+            positive    TEXT NOT NULL,
             created_at  TEXT NOT NULL
         )
     """)
-
-
-def save_insights(upload_id: str, insights) -> None:
-    """Speichert generierte Insights im Cache."""
-    import json
-    from datetime import datetime, timezone
-
-    with get_connection() as conn:
-        conn.execute("""
-            INSERT OR REPLACE INTO insights_cache
-                (upload_id, summary, warnings, tips, positive, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            upload_id,
-            insights.summary,
-            json.dumps(insights.warnings, ensure_ascii=False),
-            json.dumps(insights.tips, ensure_ascii=False),
-            json.dumps(insights.positive, ensure_ascii=False),
-            datetime.now(timezone.utc).isoformat(),
-        ))
-
-
-def get_cached_insights(upload_id: str):
-    """Gibt gecachte Insights zurück, oder None wenn nicht vorhanden."""
-    import json
-    from models import InsightResponse
-
-    with get_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM insights_cache WHERE upload_id = ?",
-            (upload_id,),
-        ).fetchone()
-
-    if row is None:
-        return None
-
-    return InsightResponse(
-        summary=row["summary"],
-        warnings=json.loads(row["warnings"]),
-        tips=json.loads(row["tips"]),
-        positive=json.loads(row["positive"]),
-    )
