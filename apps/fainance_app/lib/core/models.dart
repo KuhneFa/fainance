@@ -1,8 +1,6 @@
-// ── models.dart ───────────────────────────────────────────────────────────────
-// Dart-Entsprechungen der Python Pydantic-Models.
-// fromJson: API-Response (Map) → Dart-Objekt
-// toJson:   Dart-Objekt → Map (für POST-Requests)
+import 'package:flutter/foundation.dart';
 
+@immutable
 class Transaction {
   final int? id;
   final DateTime date;
@@ -18,36 +16,43 @@ class Transaction {
     this.category,
   });
 
-  // factory-Konstruktor: erstellt ein Objekt aus einer JSON-Map.
-  // Der `factory`-Keyword erlaubt es, null zurückzugeben oder
-  // gecachte Instanzen zurückzugeben — flexibler als ein normaler Konstruktor.
-  factory Transaction.fromJson(Map<String, dynamic> json) {
-    return Transaction(
-      id: json['id'] as int?,
-      date: DateTime.parse(json['date'] as String),
-      description: json['description'] as String,
-      amount: (json['amount'] as num).toDouble(),
-      category: json['category'] as String?,
-    );
-  }
-
   bool get isExpense => amount < 0;
   bool get isIncome => amount > 0;
 
-  // copyWith: erstellt eine Kopie mit einzelnen geänderten Feldern.
-  // Das Dart-Äquivalent zu Pydantics model_copy(update={...}).
-  Transaction copyWith({String? category}) {
+  Transaction copyWith({
+    int? id,
+    DateTime? date,
+    String? description,
+    double? amount,
+    String? category,
+  }) {
     return Transaction(
-      id: id,
-      date: date,
-      description: description,
-      amount: amount,
+      id: id ?? this.id,
+      date: date ?? this.date,
+      description: description ?? this.description,
+      amount: amount ?? this.amount,
       category: category ?? this.category,
     );
   }
+
+  factory Transaction.fromJson(Map<String, dynamic> json) => Transaction(
+        id: json['id'] as int?,
+        date: DateTime.parse(json['date'] as String),
+        description: json['description'] as String,
+        amount: (json['amount'] as num).toDouble(),
+        category: json['category'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        if (id != null) 'id': id,
+        'date': date.toIso8601String().split('T')[0],
+        'description': description,
+        'amount': amount,
+        if (category != null) 'category': category,
+      };
 }
 
-
+@immutable
 class CategorySummary {
   final String category;
   final double total;
@@ -61,17 +66,16 @@ class CategorySummary {
     required this.percentage,
   });
 
-  factory CategorySummary.fromJson(Map<String, dynamic> json) {
-    return CategorySummary(
-      category: json['category'] as String,
-      total: (json['total'] as num).toDouble(),
-      count: json['count'] as int,
-      percentage: (json['percentage'] as num).toDouble(),
-    );
-  }
+  factory CategorySummary.fromJson(Map<String, dynamic> json) =>
+      CategorySummary(
+        category: json['category'] as String,
+        total: (json['total'] as num).toDouble(),
+        count: json['count'] as int,
+        percentage: (json['percentage'] as num).toDouble(),
+      );
 }
 
-
+@immutable
 class AnalysisResult {
   final double totalIncome;
   final double totalExpenses;
@@ -89,21 +93,35 @@ class AnalysisResult {
     required this.periodEnd,
   });
 
-  factory AnalysisResult.fromJson(Map<String, dynamic> json) {
-    return AnalysisResult(
-      totalIncome: (json['total_income'] as num).toDouble(),
-      totalExpenses: (json['total_expenses'] as num).toDouble(),
-      net: (json['net'] as num).toDouble(),
-      categories: (json['categories'] as List)
-          .map((c) => CategorySummary.fromJson(c as Map<String, dynamic>))
-          .toList(),
-      periodStart: DateTime.parse(json['period_start'] as String),
-      periodEnd: DateTime.parse(json['period_end'] as String),
-    );
-  }
+  factory AnalysisResult.fromJson(Map<String, dynamic> json) => AnalysisResult(
+        totalIncome: (json['total_income'] as num).toDouble(),
+        totalExpenses: (json['total_expenses'] as num).toDouble(),
+        net: (json['net'] as num).toDouble(),
+        categories: (json['categories'] as List)
+            .map((c) => CategorySummary.fromJson(c as Map<String, dynamic>))
+            .toList(),
+        periodStart: DateTime.parse(json['period_start'] as String),
+        periodEnd: DateTime.parse(json['period_end'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'total_income': totalIncome,
+        'total_expenses': totalExpenses,
+        'net': net,
+        'categories': categories
+            .map((c) => {
+                  'category': c.category,
+                  'total': c.total,
+                  'count': c.count,
+                  'percentage': c.percentage,
+                })
+            .toList(),
+        'period_start': periodStart.toIso8601String().split('T')[0],
+        'period_end': periodEnd.toIso8601String().split('T')[0],
+      };
 }
 
-
+@immutable
 class InsightResponse {
   final String summary;
   final List<String> warnings;
@@ -117,46 +135,27 @@ class InsightResponse {
     required this.positive,
   });
 
-  factory InsightResponse.fromJson(Map<String, dynamic> json) {
-    return InsightResponse(
-      summary: json['summary'] as String,
-      warnings: List<String>.from(json['warnings'] as List),
-      tips: List<String>.from(json['tips'] as List),
-      positive: List<String>.from(json['positive'] as List),
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'summary': summary,
-        'warnings': warnings,
-        'tips': tips,
-        'positive': positive,
-      };
+  factory InsightResponse.fromJson(Map<String, dynamic> json) =>
+      InsightResponse(
+        summary: json['summary'] as String,
+        warnings: List<String>.from(json['warnings'] as List),
+        tips: List<String>.from(json['tips'] as List),
+        positive: List<String>.from(json['positive'] as List),
+      );
 }
 
-
+@immutable
 class UploadResponse {
   final String uploadId;
-  final String filename;
   final int transactionCount;
-  final String uploadedAt;
-  final String message;
 
   const UploadResponse({
     required this.uploadId,
-    required this.filename,
     required this.transactionCount,
-    required this.uploadedAt,
-    required this.message,
   });
 
-  factory UploadResponse.fromJson(Map<String, dynamic> json) {
-    return UploadResponse(
-      uploadId: json['upload_id'] as String,
-      filename: json['filename'] as String,
-      transactionCount: json['transaction_count'] as int,
-      uploadedAt: json['uploaded_at'] as String,
-      message: json['message'] as String,
-    );
-  }
+  factory UploadResponse.fromJson(Map<String, dynamic> json) => UploadResponse(
+        uploadId: json['upload_id'] as String,
+        transactionCount: json['transaction_count'] as int,
+      );
 }

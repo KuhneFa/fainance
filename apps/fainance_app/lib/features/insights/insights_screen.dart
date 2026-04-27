@@ -1,201 +1,140 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
-import '../../core/api_client.dart';
 import '../../core/models.dart';
 import '../../core/theme.dart';
+import '../../local/insights_engine.dart';
 
-// ── Insights State ─────────────────────────────────────────────────────────────
-class InsightsState extends ChangeNotifier {
-  LoadingStatus status = LoadingStatus.loading;
-  String? errorMessage;
-  InsightResponse? insights;
-
-  final _api = ApiClient();
-
-  Future<void> load(AnalysisResult analysis) async {
-    status = LoadingStatus.loading;
-    notifyListeners();
-
-    try {
-      insights = await _api.getInsights(analysis);
-      status = LoadingStatus.success;
-    } on Exception catch (e) {
-      errorMessage = parseApiError(e);
-      status = LoadingStatus.error;
-    }
-
-    notifyListeners();
-  }
-}
-
-enum LoadingStatus { loading, success, error }
-
-// ── Insights Screen ────────────────────────────────────────────────────────────
-class InsightsScreen extends StatelessWidget {
+class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final analysis =
-        ModalRoute.of(context)!.settings.arguments as AnalysisResult;
-
-    return ChangeNotifierProvider(
-      create: (_) => InsightsState()..load(analysis),
-      child: const _InsightsView(),
-    );
-  }
+  State<InsightsScreen> createState() => _InsightsScreenState();
 }
 
-class _InsightsView extends StatelessWidget {
-  const _InsightsView();
+class _InsightsScreenState extends State<InsightsScreen> {
+  InsightResponse? _insights;
+  bool _loading = true;
+  String? _error;
+
+  final _currencyFmt = NumberFormat.currency(locale: 'de_DE', symbol: '€');
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_loading) {
+      _generateInsights();
+    }
+  }
+
+  Future<void> _generateInsights() async {
+    final args =
+        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    final analysis = args['analysis'] as AnalysisResult;
+
+    try {
+      // Lokal generieren — kein Backend nötig
+      final insights = LocalInsightsEngine.generate(analysis);
+      setState(() {
+        _insights = insights;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<InsightsState>();
-
     return Scaffold(
-      appBar: AppBar(title: const Text('KI-Analyse')),
-      body: switch (state.status) {
-        LoadingStatus.loading => _LoadingView(),
-        LoadingStatus.error => _ErrorView(message: state.errorMessage!),
-        LoadingStatus.success => _SuccessView(insights: state.insights!),
-      },
-    );
-  }
-}
-
-// ── Loading ────────────────────────────────────────────────────────────────────
-class _LoadingView extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(
-            width: 48,
-            height: 48,
-            child: CircularProgressIndicator(
-              color: AppColors.accent,
-              strokeWidth: 2,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'KI analysiert deine Finanzen…',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Das lokale Sprachmodell arbeitet.\nEinen Moment Geduld.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Error ──────────────────────────────────────────────────────────────────────
-class _ErrorView extends StatelessWidget {
-  final String message;
-  const _ErrorView({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, color: AppColors.expense, size: 48),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.background,
+        title: const Text(
+          'KI-Spartipps',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: AppColors.border),
         ),
       ),
+      body: _loading
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF3B82F6)),
+            )
+          : _error != null
+              ? Center(
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                )
+              : _buildContent(),
     );
   }
-}
 
-// ── Success ────────────────────────────────────────────────────────────────────
-class _SuccessView extends StatelessWidget {
-  final InsightResponse insights;
-  const _SuccessView({required this.insights});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildContent() {
+    final i = _insights!;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // ── Zusammenfassung ──────────────────────────────────────────────────
-        _SectionCard(
-          icon: Icons.auto_awesome,
-          iconColor: AppColors.accent,
+        _buildCard(
+          icon: Icons.summarize_outlined,
           title: 'Zusammenfassung',
+          color: AppColors.accent,
           child: Text(
-            insights.summary,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  height: 1.6,
-                  fontSize: 14,
-                ),
+            i.summary,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.8),
+              fontSize: 14,
+              height: 1.5,
+            ),
           ),
         ),
-        const SizedBox(height: 12),
-
-        // ── Warnungen ────────────────────────────────────────────────────────
-        if (insights.warnings.isNotEmpty) ...[
-          _SectionCard(
+        if (i.warnings.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _buildCard(
             icon: Icons.warning_amber_rounded,
-            iconColor: AppColors.warning,
             title: 'Achtung',
-            child: _InsightList(
-              items: insights.warnings,
-              color: AppColors.warning,
-              bulletIcon: Icons.arrow_upward_rounded,
+            color: const Color(0xFFF59E0B),
+            child: Column(
+              children: i.warnings
+                  .map((w) => _buildBullet(w, const Color(0xFFF59E0B)))
+                  .toList(),
             ),
           ),
-          const SizedBox(height: 12),
         ],
-
-        // ── Spartipps ────────────────────────────────────────────────────────
-        if (insights.tips.isNotEmpty) ...[
-          _SectionCard(
+        if (i.tips.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _buildCard(
             icon: Icons.lightbulb_outline,
-            iconColor: AppColors.accent,
             title: 'Spartipps',
-            child: _InsightList(
-              items: insights.tips,
-              color: AppColors.accent,
-              bulletIcon: Icons.chevron_right_rounded,
+            color: AppColors.accent,
+            child: Column(
+              children:
+                  i.tips.map((t) => _buildBullet(t, AppColors.accent)).toList(),
             ),
           ),
-          const SizedBox(height: 12),
         ],
-
-        // ── Positives ────────────────────────────────────────────────────────
-        if (insights.positive.isNotEmpty)
-          _SectionCard(
+        if (i.positive.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _buildCard(
             icon: Icons.check_circle_outline,
-            iconColor: AppColors.positive,
             title: 'Was gut läuft',
-            child: _InsightList(
-              items: insights.positive,
-              color: AppColors.positive,
-              bulletIcon: Icons.check_rounded,
+            color: AppColors.income,
+            child: Column(
+              children: i.positive
+                  .map((p) => _buildBullet(p, AppColors.income))
+                  .toList(),
             ),
           ),
-
-        const SizedBox(height: 32),
-
-        // ── Disclaimer ───────────────────────────────────────────────────────
+        ],
+        const SizedBox(height: 24),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -204,19 +143,19 @@ class _SuccessView extends StatelessWidget {
             border: Border.all(color: AppColors.border),
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.info_outline,
-                  size: 14, color: AppColors.secondary),
+              Icon(Icons.lock_outline,
+                  size: 14, color: Colors.white.withOpacity(0.3)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Diese Analyse wird lokal von einem KI-Modell generiert '
-                  'und ersetzt keine professionelle Finanzberatung.',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(fontSize: 11),
+                  'Alle Analysen werden lokal auf deinem Gerät durchgeführt. '
+                  'Keine Daten verlassen dein Telefon.',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.3),
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
                 ),
               ),
             ],
@@ -225,112 +164,69 @@ class _SuccessView extends StatelessWidget {
       ],
     );
   }
-}
 
-// ── Wiederverwendbare Komponenten ──────────────────────────────────────────────
-
-class _SectionCard extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final Widget child;
-
-  const _SectionCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildCard({
+    required IconData icon,
+    required String title,
+    required Color color,
+    required Widget child,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header mit Icon und Titel
           Row(
             children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Icon(icon, size: 14, color: iconColor),
-              ),
-              const SizedBox(width: 10),
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 8),
               Text(
                 title,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
+                style: TextStyle(
+                  color: color,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          const Divider(height: 1),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           child,
         ],
       ),
     );
   }
-}
 
-class _InsightList extends StatelessWidget {
-  final List<String> items;
-  final Color color;
-  final IconData bulletIcon;
-
-  const _InsightList({
-    required this.items,
-    required this.color,
-    required this.bulletIcon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: items.map((item) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Bullet Icon
-              Container(
-                margin: const EdgeInsets.only(top: 2),
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Icon(bulletIcon, size: 11, color: color),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  item,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontSize: 13,
-                        height: 1.5,
-                      ),
-                ),
-              ),
-            ],
+  Widget _buildBullet(String text, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 6),
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
-        );
-      }).toList(),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.8),
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
