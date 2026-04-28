@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:dio/dio.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -20,20 +17,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _touchedIndex = -1;
   late AnalysisResult _analysis;
   late List<Transaction> _transactions;
+  late InsightResponse _insights;
   bool _initialized = false;
-
-  // LLM Insights State
-  InsightResponse? _llmInsights;
-  bool _llmLoading = false;
-  bool _llmAvailable = false; // true wenn Backend erreichbar
 
   final _currencyFmt = NumberFormat.currency(locale: 'de_DE', symbol: '€');
   final _dateFmt = DateFormat('dd.MM.yyyy', 'de_DE');
-  final _dio = Dio(BaseOptions(
-    baseUrl: 'http://localhost:8000',
-    connectTimeout: const Duration(seconds: 3),
-    receiveTimeout: const Duration(seconds: 120),
-  ));
 
   @override
   void didChangeDependencies() {
@@ -43,46 +31,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
       _analysis = args['analysis'] as AnalysisResult;
       _transactions = args['transactions'] as List<Transaction>;
+      // Insights lokal generieren — synchron, kein Server
+      _insights = LocalInsightsEngine.generate(_analysis);
       _initialized = true;
-      _checkBackendAndLoadInsights();
-    }
-  }
-
-  // ── Backend-Check + LLM Insights laden ────────────────────────────────────
-  Future<void> _checkBackendAndLoadInsights() async {
-    try {
-      await _dio.get('/');
-      // Backend erreichbar → LLM-Insights laden
-      setState(() {
-        _llmAvailable = true;
-        _llmLoading = true;
-      });
-      await _loadLlmInsights();
-    } catch (_) {
-      // Backend nicht erreichbar → kein LLM-Block, lokale Insights reichen
-      setState(() => _llmAvailable = false);
-    }
-  }
-
-  Future<void> _loadLlmInsights() async {
-    try {
-      final response = await _dio.post(
-        '/insights',
-        data: jsonEncode({'analysis': _analysis.toJson()}),
-        options: Options(contentType: 'application/json'),
-      );
-      setState(() {
-        _llmInsights = InsightResponse.fromJson(
-          response.data as Map<String, dynamic>,
-        );
-        _llmLoading = false;
-      });
-    } catch (_) {
-      // LLM-Aufruf fehlgeschlagen → lokale Insights als Fallback
-      setState(() {
-        _llmInsights = LocalInsightsEngine.generate(_analysis);
-        _llmLoading = false;
-      });
     }
   }
 
@@ -95,10 +46,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _buildAppBar(),
           SliverToBoxAdapter(child: _buildStatCards()),
           SliverToBoxAdapter(child: _buildPieChart()),
-          // LLM-Block direkt unter dem Pie Chart
-          SliverToBoxAdapter(child: _buildLlmInsightsBlock()),
+          SliverToBoxAdapter(child: _buildInsightsBlock()),
           SliverToBoxAdapter(child: _buildCategoryList()),
-          SliverToBoxAdapter(child: _buildInsightsButton()),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
           _buildTransactionList(),
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
@@ -107,16 +56,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── App Bar ────────────────────────────────────────────────────────────────
   Widget _buildAppBar() {
     return SliverAppBar(
       backgroundColor: AppColors.background,
       pinned: true,
-      title: const Text(
-        'Analyse',
-        style: TextStyle(
-            color: Colors.white, fontWeight: FontWeight.w600, fontSize: 18),
-      ),
+      title: const Text('Analyse',
+          style: TextStyle(
+              color: Colors.white, fontWeight: FontWeight.w600, fontSize: 18)),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
@@ -130,7 +76,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── Stat Cards ─────────────────────────────────────────────────────────────
   Widget _buildStatCards() {
     final items = [
       (
@@ -149,47 +94,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _analysis.net >= 0 ? AppColors.income : AppColors.expense
       ),
     ];
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
       child: Row(
-        children: items.map((item) {
-          return Expanded(
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(item.$1,
-                      style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5),
-                          fontSize: 11)),
-                  const SizedBox(height: 4),
-                  FittedBox(
-                    child: Text(item.$2,
-                        style: TextStyle(
-                            color: item.$3,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600)),
+        children: items
+            .map((item) => Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(item.$1,
+                            style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontSize: 11)),
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          child: Text(item.$2,
+                              style: TextStyle(
+                                  color: item.$3,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
+                ))
+            .toList(),
       ),
     );
   }
 
-  // ── Pie Chart ──────────────────────────────────────────────────────────────
   Widget _buildPieChart() {
-    final categories = _analysis.categories;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
       child: Container(
@@ -212,25 +154,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
               height: 200,
               child: PieChart(PieChartData(
                 pieTouchData: PieTouchData(
-                  touchCallback: (event, response) => setState(() {
+                  touchCallback: (_, response) => setState(() {
                     _touchedIndex =
                         response?.touchedSection?.touchedSectionIndex ?? -1;
                   }),
                 ),
                 sectionsSpace: 2,
                 centerSpaceRadius: 60,
-                sections: categories.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final cat = entry.value;
-                  final isTouched = i == _touchedIndex;
+                sections: _analysis.categories.asMap().entries.map((e) {
+                  final isTouched = e.key == _touchedIndex;
                   return PieChartSectionData(
-                    value: cat.total,
+                    value: e.value.total,
                     title: isTouched
-                        ? '${cat.percentage.toStringAsFixed(1)}%'
+                        ? '${e.value.percentage.toStringAsFixed(1)}%'
                         : '',
                     radius: isTouched ? 50 : 40,
-                    color:
-                        AppColors.chartColors[i % AppColors.chartColors.length],
+                    color: AppColors
+                        .chartColors[e.key % AppColors.chartColors.length],
                     titleStyle: const TextStyle(
                         color: Colors.white,
                         fontSize: 12,
@@ -245,13 +185,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── LLM Insights Block ─────────────────────────────────────────────────────
-  // Erscheint nur wenn Backend erreichbar. Zeigt Ladeindikator während
-  // Ollama rechnet, dann Zusammenfassung + erste Warnung + ersten Tipp.
-  Widget _buildLlmInsightsBlock() {
-    // Backend nicht verfügbar → Block komplett ausblenden
-    if (!_llmAvailable) return const SizedBox.shrink();
-
+  // ── Insights direkt unter Pie Chart ───────────────────────────────────────
+  Widget _buildInsightsBlock() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Container(
@@ -264,97 +199,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
-            Row(
-              children: [
-                Icon(Icons.auto_awesome, color: AppColors.accent, size: 16),
-                const SizedBox(width: 8),
-                Text(
-                  'KI-Analyse',
+            Row(children: [
+              Icon(Icons.auto_awesome, color: AppColors.accent, size: 16),
+              const SizedBox(width: 8),
+              Text('Analyse',
                   style: TextStyle(
                       color: AppColors.accent,
                       fontSize: 14,
-                      fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                if (_llmLoading)
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      color: AppColors.accent,
-                    ),
-                  ),
-              ],
-            ),
+                      fontWeight: FontWeight.w600)),
+            ]),
             const SizedBox(height: 12),
-
-            // Inhalt
-            if (_llmLoading)
-              Text(
-                'Ollama analysiert deine Ausgaben...',
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
-              )
-            else if (_llmInsights != null) ...[
-              // Zusammenfassung
-              Text(
-                _llmInsights!.summary,
+            Text(_insights.summary,
                 style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.85),
                     fontSize: 14,
-                    height: 1.5),
-              ),
-              // Erste Warnung
-              if (_llmInsights!.warnings.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                _llmChip(
-                  icon: Icons.warning_amber_rounded,
-                  text: _llmInsights!.warnings.first,
-                  color: const Color(0xFFF59E0B),
-                ),
-              ],
-              // Erster Tipp
-              if (_llmInsights!.tips.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                _llmChip(
-                  icon: Icons.lightbulb_outline,
-                  text: _llmInsights!.tips.first,
-                  color: AppColors.accent,
-                ),
-              ],
-              // Link zu vollständigen Insights
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  '/insights',
-                  arguments: {
-                    'analysis': _analysis,
-                    'transactions': _transactions,
-                  },
-                ),
-                child: Text(
-                  'Alle Tipps anzeigen →',
+                    height: 1.5)),
+            if (_insights.warnings.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _chip(Icons.warning_amber_rounded, _insights.warnings.first,
+                  const Color(0xFFF59E0B)),
+            ],
+            if (_insights.tips.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _chip(Icons.lightbulb_outline, _insights.tips.first,
+                  AppColors.accent),
+            ],
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () =>
+                  Navigator.pushNamed(context, '/insights', arguments: {
+                'analysis': _analysis,
+                'transactions': _transactions,
+              }),
+              child: Text('Alle Tipps →',
                   style: TextStyle(
                       color: AppColors.accent,
                       fontSize: 13,
-                      fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
+                      fontWeight: FontWeight.w500)),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _llmChip({
-    required IconData icon,
-    required String text,
-    required Color color,
-  }) {
+  Widget _chip(IconData icon, String text, Color color) {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -379,7 +268,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── Kategorie-Liste ────────────────────────────────────────────────────────
   Widget _buildCategoryList() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -390,27 +278,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
           border: Border.all(color: AppColors.border),
         ),
         child: Column(
-          children: _analysis.categories.asMap().entries.map((entry) {
-            final i = entry.key;
-            final cat = entry.value;
+          children: _analysis.categories.asMap().entries.map((e) {
             final color =
-                AppColors.chartColors[i % AppColors.chartColors.length];
+                AppColors.chartColors[e.key % AppColors.chartColors.length];
+            final cat = e.value;
             return Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               child: Column(children: [
                 Row(children: [
                   Container(
-                    width: 10,
-                    height: 10,
-                    decoration:
-                        BoxDecoration(color: color, shape: BoxShape.circle),
-                  ),
+                      width: 10,
+                      height: 10,
+                      decoration:
+                          BoxDecoration(color: color, shape: BoxShape.circle)),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(cat.category,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 14)),
-                  ),
+                      child: Text(cat.category,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 14))),
                   Text(_currencyFmt.format(cat.total),
                       style: const TextStyle(
                           color: Colors.white,
@@ -419,13 +304,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(width: 8),
                   SizedBox(
                     width: 44,
-                    child: Text(
-                      '${cat.percentage.toStringAsFixed(1)}%',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.4),
-                          fontSize: 12),
-                    ),
+                    child: Text('${cat.percentage.toStringAsFixed(1)}%',
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.4),
+                            fontSize: 12)),
                   ),
                 ]),
                 const SizedBox(height: 6),
@@ -444,36 +327,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── Insights Button ────────────────────────────────────────────────────────
-  Widget _buildInsightsButton() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          onPressed: () => Navigator.pushNamed(
-            context,
-            '/insights',
-            arguments: {
-              'analysis': _analysis,
-              'transactions': _transactions,
-            },
-          ),
-          icon: const Icon(Icons.auto_awesome, size: 18),
-          label: const Text('Alle KI-Tipps anzeigen'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.accent,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Transaktionsliste ──────────────────────────────────────────────────────
   Widget _buildTransactionList() {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -481,13 +334,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (index == 0) {
             return Padding(
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-              child: Text(
-                'Transaktionen (${_transactions.length})',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600),
-              ),
+              child: Text('Transaktionen (${_transactions.length})',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600)),
             );
           }
           final t = _transactions[index - 1];
@@ -534,13 +385,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-              Text(
-                _currencyFmt.format(t.amount),
-                style: TextStyle(
-                    color: t.amount > 0 ? AppColors.income : AppColors.expense,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600),
-              ),
+              Text(_currencyFmt.format(t.amount),
+                  style: TextStyle(
+                      color:
+                          t.amount > 0 ? AppColors.income : AppColors.expense,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
             ]),
           );
         },

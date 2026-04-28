@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../core/models.dart';
 import '../../core/theme.dart';
@@ -14,38 +13,25 @@ class InsightsScreen extends StatefulWidget {
 
 class _InsightsScreenState extends State<InsightsScreen> {
   InsightResponse? _insights;
-  bool _loading = true;
-  String? _error;
-
-  final _currencyFmt = NumberFormat.currency(locale: 'de_DE', symbol: '€');
+  bool _initialized = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_loading) {
-      _generateInsights();
+    if (!_initialized) {
+      final args =
+          ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+      final analysis = args['analysis'] as AnalysisResult;
+      final descriptions = (args['descriptions'] as List<String>?) ?? [];
+      _insights = LocalInsightsEngine.generate(
+        analysis,
+        descriptions: descriptions,
+      );
+      _initialized = true;
     }
   }
 
-  Future<void> _generateInsights() async {
-    final args =
-        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-    final analysis = args['analysis'] as AnalysisResult;
-
-    try {
-      // Lokal generieren — kein Backend nötig
-      final insights = LocalInsightsEngine.generate(analysis);
-      setState(() {
-        _insights = insights;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
+  bool get _isDe => _insights?.language != 'en';
 
   @override
   Widget build(BuildContext context) {
@@ -53,9 +39,10 @@ class _InsightsScreenState extends State<InsightsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
-        title: const Text(
-          'KI-Spartipps',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        title: Text(
+          _isDe ? 'Deine Finanzen' : 'Your Finances',
+          style:
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         bottom: PreferredSize(
@@ -63,77 +50,86 @@ class _InsightsScreenState extends State<InsightsScreen> {
           child: Container(height: 1, color: AppColors.border),
         ),
       ),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF3B82F6)),
-            )
-          : _error != null
-              ? Center(
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                )
-              : _buildContent(),
+      body: _insights == null
+          ? const Center(child: CircularProgressIndicator())
+          : _buildContent(_insights!),
     );
   }
 
-  Widget _buildContent() {
-    final i = _insights!;
+  Widget _buildContent(InsightResponse i) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _buildCard(
-          icon: Icons.summarize_outlined,
-          title: 'Zusammenfassung',
+        // ── Zusammenfassung ──────────────────────────────────────────────────
+        _card(
+          icon: Icons.bar_chart_rounded,
+          title: _isDe ? 'Zusammenfassung' : 'Summary',
           color: AppColors.accent,
-          child: Text(
-            i.summary,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
-              fontSize: 14,
-              height: 1.5,
+          child: Text(i.summary,
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontSize: 14,
+                  height: 1.5)),
+        ),
+
+        // ── Bewusstseins-Analyse ─────────────────────────────────────────────
+        if (i.awareness.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _card(
+            icon: Icons.visibility_outlined,
+            title: _isDe ? 'Wo du am meisten buchst' : 'Where you book most',
+            color: const Color(0xFF8B5CF6),
+            child: Column(
+              children: i.awareness.map((a) => _awarenessRow(a)).toList(),
             ),
           ),
-        ),
+        ],
+
+        // ── Warnungen ────────────────────────────────────────────────────────
         if (i.warnings.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _buildCard(
-            icon: Icons.warning_amber_rounded,
-            title: 'Achtung',
+          _card(
+            icon: Icons.info_outline_rounded,
+            title:
+                _isDe ? 'Im Vergleich zum Richtwert' : 'Compared to benchmarks',
             color: const Color(0xFFF59E0B),
             child: Column(
               children: i.warnings
-                  .map((w) => _buildBullet(w, const Color(0xFFF59E0B)))
+                  .map((w) => _bullet(w, const Color(0xFFF59E0B)))
                   .toList(),
             ),
           ),
         ],
+
+        // ── Tipps ────────────────────────────────────────────────────────────
         if (i.tips.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _buildCard(
+          _card(
             icon: Icons.lightbulb_outline,
-            title: 'Spartipps',
+            title: _isDe ? 'Ideen zum Sparen' : 'Ideas to save',
             color: AppColors.accent,
             child: Column(
               children:
-                  i.tips.map((t) => _buildBullet(t, AppColors.accent)).toList(),
+                  i.tips.map((t) => _bullet(t, AppColors.accent)).toList(),
             ),
           ),
         ],
+
+        // ── Positives ────────────────────────────────────────────────────────
         if (i.positive.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _buildCard(
+          _card(
             icon: Icons.check_circle_outline,
-            title: 'Was gut läuft',
+            title: _isDe ? 'Was gut läuft' : 'What\'s going well',
             color: AppColors.income,
             child: Column(
-              children: i.positive
-                  .map((p) => _buildBullet(p, AppColors.income))
-                  .toList(),
+              children:
+                  i.positive.map((p) => _bullet(p, AppColors.income)).toList(),
             ),
           ),
         ],
+
+        // ── Disclaimer ───────────────────────────────────────────────────────
         const SizedBox(height: 24),
         Container(
           padding: const EdgeInsets.all(12),
@@ -143,19 +139,22 @@ class _InsightsScreenState extends State<InsightsScreen> {
             border: Border.all(color: AppColors.border),
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(Icons.lock_outline,
-                  size: 14, color: Colors.white.withOpacity(0.3)),
+                  size: 14, color: Colors.white.withValues(alpha: 0.3)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Alle Analysen werden lokal auf deinem Gerät durchgeführt. '
-                  'Keine Daten verlassen dein Telefon.',
+                  _isDe
+                      ? 'Alle Analysen laufen lokal auf deinem Gerät. '
+                          'Keine Daten verlassen dein Telefon.'
+                      : 'All analysis runs locally on your device. '
+                          'No data leaves your phone.',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.3),
-                    fontSize: 11,
-                    height: 1.4,
-                  ),
+                      color: Colors.white.withValues(alpha: 0.3),
+                      fontSize: 11,
+                      height: 1.4),
                 ),
               ),
             ],
@@ -165,7 +164,53 @@ class _InsightsScreenState extends State<InsightsScreen> {
     );
   }
 
-  Widget _buildCard({
+  // ── Awareness Row — zeigt Buchungsfrequenz ohne Wertung ───────────────────
+  Widget _awarenessRow(CategoryAwareness a) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(a.category,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(height: 2),
+                Text(
+                  _isDe
+                      ? '${a.bookingCount}× gebucht · ${a.total.toStringAsFixed(2)}€'
+                      : '${a.bookingCount}× booked · ${a.total.toStringAsFixed(2)}€',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '${a.percentageOfExpenses.toStringAsFixed(1)}%',
+              style: const TextStyle(
+                  color: Color(0xFF8B5CF6),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _card({
     required IconData icon,
     required String title,
     required Color color,
@@ -181,20 +226,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                title,
+          Row(children: [
+            Icon(icon, color: color, size: 16),
+            const SizedBox(width: 8),
+            Text(title,
                 style: TextStyle(
-                  color: color,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
+                    color: color, fontSize: 13, fontWeight: FontWeight.w600)),
+          ]),
           const SizedBox(height: 12),
           child,
         ],
@@ -202,7 +240,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
     );
   }
 
-  Widget _buildBullet(String text, Color color) {
+  Widget _bullet(String text, Color color) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -216,14 +254,11 @@ class _InsightsScreenState extends State<InsightsScreen> {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.8),
-                fontSize: 14,
-                height: 1.4,
-              ),
-            ),
+            child: Text(text,
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    fontSize: 14,
+                    height: 1.4)),
           ),
         ],
       ),

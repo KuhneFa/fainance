@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../local/insights_engine.dart' show CategoryAwareness;
 
 @immutable
 class Transaction {
@@ -127,12 +128,16 @@ class InsightResponse {
   final List<String> warnings;
   final List<String> tips;
   final List<String> positive;
+  final List<CategoryAwareness> awareness;
+  final String language; // 'de' oder 'en'
 
   const InsightResponse({
     required this.summary,
     required this.warnings,
     required this.tips,
     required this.positive,
+    this.awareness = const [],
+    this.language = 'de',
   });
 
   factory InsightResponse.fromJson(Map<String, dynamic> json) =>
